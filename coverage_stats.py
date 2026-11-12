@@ -342,6 +342,13 @@ def main():
         for q in QUANTITIES:
             a = A[q]["value"].values[A[q]["site"].values != s]
             thr[name][q] = tuple(np.percentile(a, [0.1, 99.9]))
+    # Round every range end to the nearest 32-bit float. The ERA5 values are
+    # 32-bit, and many sit exactly on the tower values' 0.01 steps (e.g. 40.41).
+    # With 32-bit ends, "x < lo" and "x > hi" give the same answer whether
+    # numpy compares in 32 or 64 bits (numpy 1.x compares a float32 array with
+    # a float64 number in 32 bits, numpy 2 in 64), and a value equal to an end
+    # counts as inside. Changes the ends by at most 1 part in 10 million.
+    thr = {r: {q: (float(np.float32(lo)), float(np.float32(hi))) for q, (lo, hi) in d_.items()} for r, d_ in thr.items()}
     pd.DataFrame([{"range": r, "quantity": q, "lo": lo, "hi": hi} for r, d_ in thr.items() for q, (lo, hi) in d_.items()]
                  ).to_csv(out / "thresholds.csv", index=False)   # full precision: the ends are bin edges
 

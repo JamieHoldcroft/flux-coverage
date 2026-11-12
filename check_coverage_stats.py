@@ -31,7 +31,7 @@ def main():
     args = p.parse_args()
     res = Path(args.results)
     cells = pd.read_csv(Path(args.era5) / "cells.csv")
-    thr = pd.read_csv(res / "thresholds.csv")
+    thr = pd.read_csv(res / "thresholds.csv", float_precision="round_trip")   # exact floats: the ends are bin edges
     sh = pd.read_csv(res / "shares.csv")
     rg = pd.read_csv(res / "ranges.csv")
     tv = pd.read_csv(res / "tower_value.csv")
@@ -42,6 +42,10 @@ def main():
     w = cells.weight.values
     site = tv.site.iloc[0]
     fails = 0
+    import hashlib
+    for f in ("coverage_stats.py", "check_coverage_stats.py"):
+        print(f, hashlib.md5(Path(__file__).with_name(f).read_bytes()).hexdigest())
+    print("numpy", np.__version__, "pandas", pd.__version__, "xarray", xr.__version__)
     for q in cs.QUANTITIES:
         x = ds[q].values.astype("float32")
         ok = np.isfinite(x)
@@ -56,7 +60,15 @@ def main():
                 got = tv[(tv.site == site) & (tv.quantity == q)].outside_without.values[0]
             else:
                 got = sh[(sh.range == rname) & (sh.quantity == q) & (sh.group == "D_australia")].outside.values[0]
-            worst = max(worst, abs(direct - got) / max(direct, 1e-12) if direct > 0 else abs(got))
+            err = abs(direct - got) / max(direct, 1e-12) if direct > 0 else abs(got)
+            worst = max(worst, err)
+            if err >= 1e-8:
+                # explain the disagreement: values sitting exactly on a range end
+                x64 = x[ok].astype("float64")
+                print(f"   {q} {rname}: lo={lo!r} hi={hi!r} stored={got:.10f} recount={direct:.10f} "
+                      f"recount64={(W[ok][x64 < lo].sum() + W[ok][x64 > hi].sum()) / W[ok].sum():.10f} "
+                      f"hours equal to lo={int((x == np.float32(lo)).sum())} hi={int((x == np.float32(hi)).sum())} "
+                      f"dtype={x.dtype} lo_type={type(lo).__name__}", flush=True)
         lo, hi = thr[(thr.range == cs.MAIN) & (thr.quantity == q)][["lo", "hi"]].values[0]
         cell_ok = bool(((pc[f"{q}_below"].sum("year") + pc[f"{q}_above"].sum("year")).values
                         == ((x < lo) | (x > hi)).sum(0)).all())
