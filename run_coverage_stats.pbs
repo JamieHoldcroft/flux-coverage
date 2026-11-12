@@ -1,0 +1,26 @@
+#!/bin/bash
+# Tower vs ERA5 single-variable coverage (coverage_stats.py), 1980-2025.
+#   Needs: data/ (tower_hourly.csv.gz, tower_halfhourly.csv.gz, tower_sites.csv) next to this script,
+#          and the ERA5 files from run_era5_hourly.pbs.
+#   Small test: qsub -N cov_test -l walltime=01:00:00 -v START=2010,END=2011,OUT=results_test,CHECK=1 run_coverage_stats.pbs
+#   Full run:   qsub run_coverage_stats.pbs
+#PBS -N cov_stats
+#PBS -P dt6
+#PBS -q normal
+#PBS -l ncpus=48
+#PBS -l mem=190GB
+#PBS -l walltime=04:00:00
+#PBS -l storage=scratch/dt6
+#PBS -l wd
+#PBS -j oe
+
+set -e
+module unload python3 2>/dev/null || true
+module load python3/3.11.7
+python3 coverage_stats.py --towers data --era5 /scratch/dt6/$USER/fc/era5_hourly \
+    --years ${START:-1980} ${END:-2025} --workers ${WORKERS:-8} --out /scratch/dt6/$USER/fc/${OUT:-results}
+python3 make_figures.py --results /scratch/dt6/$USER/fc/${OUT:-results} --out /scratch/dt6/$USER/fc/${OUT:-results}/figures
+if [ -n "$CHECK" ]; then
+    python3 check_coverage_stats.py --era5 /scratch/dt6/$USER/fc/era5_hourly \
+        --results /scratch/dt6/$USER/fc/${OUT:-results} --years ${START:-1980} ${END:-2025}
+fi

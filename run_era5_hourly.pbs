@@ -1,0 +1,20 @@
+#!/bin/bash
+# Hourly ERA5 for Australia, years START..END (default 1980-2025), 12 years at a time.
+# Years already done are skipped, so it is safe to resubmit.
+#   Test (2 years): qsub -N era5h_test -l ncpus=4,mem=32GB,walltime=01:00:00 -v START=2010,END=2011,WORKERS=2 run_era5_hourly.pbs
+#   Full pull:      qsub run_era5_hourly.pbs
+#PBS -N era5h
+#PBS -P dt6
+#PBS -q normal
+#PBS -l ncpus=48
+#PBS -l mem=190GB
+#PBS -l walltime=06:00:00
+#PBS -l storage=gdata/rt52+scratch/dt6
+#PBS -l wd
+#PBS -j oe
+
+set -e
+module unload python3 2>/dev/null || true
+module load python3/3.11.7
+OUT=/scratch/dt6/$USER/fc/era5_hourly
+python3 era5_hourly_australia.py --years ${START:-1980} ${END:-2025} --workers ${WORKERS:-12} --out $OUT
