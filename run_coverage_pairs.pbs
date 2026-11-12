@@ -1,0 +1,27 @@
+#!/bin/bash
+# Tower vs ERA5 coverage of PAIRS of variables (coverage_pairs.py), 1980-2025.
+#   Needs: data/ next to this script, the ERA5 files, and the finished coverage_stats.py
+#          results folder (thresholds.csv, era5_tower_cells.nc), default /scratch/dt6/$USER/fc/results.
+#   Small test: qsub -N pairs_test -l ncpus=16,mem=64GB,walltime=01:30:00 -v START=2010,END=2011,WORKERS=2,OUT=results_pairs_test,CHECK=1 run_coverage_pairs.pbs
+#   Full run:   qsub run_coverage_pairs.pbs
+#PBS -N cov_pairs
+#PBS -P dt6
+#PBS -q normal
+#PBS -l ncpus=48
+#PBS -l mem=190GB
+#PBS -l walltime=02:00:00
+#PBS -l storage=scratch/dt6
+#PBS -l wd
+#PBS -j oe
+
+set -e
+module unload python3 2>/dev/null || true
+module load python3/3.11.7
+FC=/scratch/dt6/$USER/fc
+python3 coverage_pairs.py --towers data --era5 $FC/era5_hourly --single $FC/${SINGLE:-results} \
+    --years ${START:-1980} ${END:-2025} --workers ${WORKERS:-8} --out $FC/${OUT:-results_pairs}
+python3 make_figures_pairs.py --results $FC/${OUT:-results_pairs} --towers data --out $FC/${OUT:-results_pairs}/figures
+if [ -n "$CHECK" ]; then
+    python3 check_coverage_pairs.py --towers data --era5 $FC/era5_hourly --single $FC/${SINGLE:-results} \
+        --pairs $FC/${OUT:-results_pairs} --years ${START:-1980} ${END:-2025}
+fi
