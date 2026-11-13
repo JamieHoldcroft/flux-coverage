@@ -14,7 +14,8 @@ One variable at a time, hourly: the range of every fully measured hour at the
 | 3 | Gadi | one-year test, then the full pull (see below) | `era5_hourly_<year>.nc` |
 | 4 | Gadi | two-year stats test + `check_coverage_stats.py`, then the full stats run | `results/` + `results/figures/` |
 | 5 | Gadi | pairs: two-year test + `check_coverage_pairs.py`, then the full run | `results_pairs/` + figures |
-| 6 | laptop (optional) | `python make_figures.py --results results --out figures` (and `make_figures_pairs.py`) | figures, summaries |
+| 6 | Gadi | all variables together (AOA + kNN-10): two-year test + `check_coverage_aoa.py`, then the full run | `results_aoa/` + figures |
+| 7 | laptop (optional) | `python make_figures.py --results results --out figures` (and `make_figures_pairs.py`, `make_figures_aoa.py`) | figures, summaries |
 
 Gadi commands (from the repo folder on Gadi, with `data/` copied next to the scripts):
 
@@ -33,6 +34,10 @@ qsub run_coverage_stats.pbs
 qsub -N pairs_test -l ncpus=16,mem=64GB,walltime=01:30:00 -v START=2010,END=2011,WORKERS=2,OUT=results_pairs_test,CHECK=1 run_coverage_pairs.pbs
 # step 5b: the real pairs run, 1980-2025
 qsub run_coverage_pairs.pbs
+# step 6a: all variables on two test years + brute-force self-check (the log must say ALL PASS)
+qsub -N aoa_test -l walltime=01:30:00 -v START=2010,END=2011,OUT=results_aoa_test,CHECK=1 run_coverage_aoa.pbs
+# step 6b: the real run, 1980-2025 (other variable sets: -v VARS="...",OUT=results_aoa_<name>)
+qsub run_coverage_aoa.pbs
 ```
 
 `check_coverage_stats.py` recounts every Australia share the slow, obvious way
@@ -41,6 +46,9 @@ counts, and checks that the quantiles are within one fine bin.
 `check_coverage_pairs.py` does the same for the pairs: it rebuilds every
 envelope with its own code and recounts every share, combination-only share,
 per-cell count, yearly share and leave-one-site-out share.
+`check_coverage_aoa.py` recomputes the distances of random tower and ERA5 hours
+by brute force (no kd-tree), the cut-offs, and every share, breakdown, monthly,
+hourly, yearly and per-cell number from the saved distances.
 
 ## Method in one paragraph
 
@@ -72,5 +80,15 @@ into point-vs-grid, which-years and which-places parts.
   steps for the pairs, so ERA5 is not penalised for values between two gauge
   steps. "Combination-only" = outside the envelope but inside both 1-variable
   ranges. Variants: 20/40/80 bins x 0/0.2/1 % trimmed.
+* All variables together (`coverage_aoa.py`): Tair, VPD, SW, LW, rain, wind
+  (Qair is calculated from Tair and VPD; pressure mostly labels elevation).
+  Each is standardised by the tower mean and sd, rain on the same log axis as
+  the pairs. Main: Area of Applicability (Meyer & Pebesma 2021, as in R CAST):
+  DI = distance to the nearest tower hour / mean distance between tower hours;
+  an hour is uncovered if DI is above the box-plot upper whisker of the towers'
+  own leave-one-tower-out DI. Check: distance to the 10th nearest tower hour,
+  cut-off = 99.8th percentile of the towers' own value. Uncovered hours are
+  split into: a variable outside its range / a pair outside its envelope /
+  joint only. Tower value is computed on a fixed 1-in-200 sample.
 * Shares of Australia are exact (bin edges include every range end); its
   quantiles are interpolated within fine bins (e.g. 0.05 °C).

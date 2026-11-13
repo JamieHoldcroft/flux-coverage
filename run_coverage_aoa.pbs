@@ -1,0 +1,35 @@
+#!/bin/bash
+# All variables together (coverage_aoa.py): AOA (main) and kNN-10 (check), 1980-2025.
+#   Needs: data/ next to this script, the ERA5 files, the finished coverage_stats.py results
+#          (default results/) and coverage_pairs.py results (default results_pairs/, for the breakdown).
+#   Test:      qsub -N aoa_test -l walltime=01:30:00 -v START=2010,END=2011,OUT=results_aoa_test,CHECK=1 run_coverage_aoa.pbs
+#   Full run:  qsub run_coverage_aoa.pbs
+#   Other variable set (sensitivity), e.g. with pressure:
+#              qsub -v VARS="tair vpd psurf swdown lwdown precip wind",OUT=results_aoa_psurf run_coverage_aoa.pbs
+#PBS -N cov_aoa
+#PBS -P dt6
+#PBS -q normal
+#PBS -l ncpus=48
+#PBS -l mem=190GB
+#PBS -l walltime=05:00:00
+#PBS -l storage=scratch/dt6
+#PBS -l wd
+#PBS -j oe
+
+set -e
+module unload python3 2>/dev/null || true
+module load python3/3.11.7
+FC=/scratch/dt6/$USER/fc
+OUT=$FC/${OUT:-results_aoa}
+VARS=${VARS:-"tair vpd swdown lwdown precip wind"}
+SAVE=""
+if [ -n "$CHECK" ]; then SAVE="--save-di"; fi
+python3 coverage_aoa.py --towers data --era5 $FC/era5_hourly --single $FC/${SINGLE:-results} \
+    --pairs $FC/${PAIRS:-results_pairs} --vars $VARS --years ${START:-1980} ${END:-2025} \
+    --workers ${PBS_NCPUS:-48} $SAVE --out $OUT
+python3 make_figures_aoa.py --results $OUT --towers data --out $OUT/figures
+if [ -n "$CHECK" ]; then
+    python3 check_coverage_aoa.py --towers data --era5 $FC/era5_hourly --single $FC/${SINGLE:-results} \
+        --pairs $FC/${PAIRS:-results_pairs} --run $OUT
+    rm -f $OUT/di_*.npy $OUT/di_groups.npz     # large test-only files
+fi
